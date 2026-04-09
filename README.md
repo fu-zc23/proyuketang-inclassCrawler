@@ -8,24 +8,20 @@
 
 ### 1. 配置 `config.json` 文件
 
-进入上课界面，首先将网址中的 `lesson_id` 复制到 `config.json` 文件的 `lesson_id` 项中。例如，下面网址中的 `lesson_id` 为 `1654713179045335936`。
+进入上课界面，将网址中的 `lesson_id` 复制到 `config.json` 文件的 `lesson_id` 项中，这通常是一个 19 位数字。例如，下面网址中的 `lesson_id` 为 `165471317xxxxxxxxxx`。
 
 ```
-https://pro.yuketang.cn/lesson/student/v3/1654713179045335936?source=5
+https://pro.yuketang.cn/lesson/student/v3/165471317xxxxxxxxxx?source=5
 ```
 
-再按 `F12` 打开开发者工具，切换到 “网络” 标签页并刷新页面。
-
-找到 `fetch?presentation_id=...` 请求，查看请求标头。先将 `:path` 字段中 `presentation_id=` 之后的内容复制到 `config.json` 文件的对应位置，再将 `cookie` 字段中从 `sessionid=` 到最近分号前的内容复制到 `config.json` 文件中。
-
-![config](img.jpg)
+`sessionid` 项可留空，运行程序时扫码登录后会自动获取、保存。
 
 ### 2. 运行程序
 
 确保安装所有依赖后运行该程序，注意 `fpdf` 需要安装 `fpdf2`。
 
 ```
-python inclass_crawler.py --mode slides
+python inclass_crawler.py --mode slides --workers 8
 ```
 
 参数说明：
@@ -34,11 +30,12 @@ python inclass_crawler.py --mode slides
   - `slides`：仅下载课件，保存到当前目录，命名为 `slides.pdf`。
   - `problems`：仅下载互动题目，以 jpg 格式保存到 `problems` 目录下，命名为 `Slide_n.jpg`。其中 `n` 为该互动题目所在页码。
   - `both`：同时下载课件和互动题目。
+- `--workers`：下载线程数，默认为 `4`。
 
 
 ### 3. 注意事项
 
-注意该程序仅用于获取当前课件，若课堂中放映了多个课件需要分别获取。
+注意该程序仅用于获取当前正在放映的课件，若课上放映了新的课件需要重新获取。
 
 ## LISENCE
 
