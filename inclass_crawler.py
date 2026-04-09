@@ -5,6 +5,7 @@ import json
 import time
 import argparse
 import requests
+import websocket
 from fpdf import FPDF
 from PIL import Image
 from io import BytesIO
@@ -12,22 +13,19 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 def download_slide(slide_info, sessionid, auth):
-    session = requests.Session()
-    session.headers.update({
+    idx, slide = slide_info
+    headers = {
         "cookie": f"sessionid={sessionid}",
         "authorization": f"Bearer {auth}",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
-    })
-    idx, slide = slide_info
+    }
     try:
-        response = session.get(f"{slide['cover']}", timeout=30)
-    except requests.exceptions.RequestException as e:
+        response = requests.get(slide['cover'], headers=headers, timeout=30)
+        if response.status_code == 200:
+            return idx, slide, response.content
+    except Exception as e:
         print(f"Failed to get slide {idx}. Error: {e}")
-        return idx, slide, None
-    if response.status_code != 200:
-        print(f"Failed to get slide {idx}. Status code: {response.status_code}")
-        return idx, slide, None
-    return idx, slide, response.content
+    return idx, slide, None
 
 
 def login_and_get_sessionid(session):
@@ -105,23 +103,56 @@ def login_and_get_sessionid(session):
 
 
 def is_sessionid_valid(session):
-    url = "https://pro.yuketang.cn/api/v3/user/basic-info"
     try:
-        response = session.get(url)
-    except requests.exceptions.RequestException:
-        return False
-    if response.status_code != 200:
-        return False
-    try:
-        response = response.json()
+        res = session.get("https://pro.yuketang.cn/api/v3/user/basic-info", timeout=10).json()
+        return res.get("code") == 0
     except:
         return False
-    return response["code"] == 0
 
 
 def save_config(config):
     with open("config.json", "w") as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
+
+
+def get_presentation_id(sessionid, lesson_id, user_id, auth):
+    ws = None
+    try:
+        ws = websocket.create_connection(
+            "wss://pro.yuketang.cn/wsapp/",
+            timeout=10,
+            header=[
+                "Origin: https://pro.yuketang.cn",
+                f"Cookie: sessionid={sessionid}",
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+            ]
+        )
+        hello_msg = {
+            "op": "hello",
+            "userid": str(user_id),
+            "role": "student",
+            "auth": auth,
+            "lessonid": str(lesson_id)
+        }
+        ws.send(json.dumps(hello_msg))
+        msg = json.loads(ws.recv())
+
+        if msg.get("presentation"):
+            return msg["presentation"]
+        else:
+            print("Error: failed to get presentation_id from websocket.")
+            print("Response: ")
+            print(msg)
+            sys.exit()
+
+    except Exception as e:
+        print(f"Error: failed to get presentation_id from websocket. {e}")
+        sys.exit()
+    finally:
+        if ws is not None:
+            ws.close()
+    print("Error: failed to get presentation_id.")
+    sys.exit()
 
 
 if __name__ == "__main__":
@@ -142,7 +173,6 @@ if __name__ == "__main__":
             config = json.load(f)
             sessionid = config["sessionid"]
             lesson_id = config["lesson_id"]
-            presentation_id = config["presentation_id"]
     except:
         print("Error: config.json not found or invalid.")
         sys.exit()
@@ -163,7 +193,7 @@ if __name__ == "__main__":
         })
 
 
-    # set authorization
+    # checkin
     data = {
         "lessonId": lesson_id,
         "source": 5
@@ -173,6 +203,13 @@ if __name__ == "__main__":
     response = session.post(url, json=data)
     auth = response.headers.get("Set-Auth")
     session.headers.update({"authorization": "Bearer " + auth})
+    identity_id = response.json()["data"]["identityId"]
+    lesson_token = response.json()["data"]["lessonToken"]
+
+
+    # get presentation_id
+    presentation_id = get_presentation_id(sessionid, lesson_id, identity_id, lesson_token)
+    print(f"Auto detected presentation_id: {presentation_id}")
 
 
     # get slides
