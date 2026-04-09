@@ -164,6 +164,12 @@ if __name__ == "__main__":
         default="both",
         help="slides: 导出整份课件PDF；problems: 导出互动题图片；both: 两者都导出"
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="下载线程数"
+    )
     args = parser.parse_args()
 
 
@@ -248,7 +254,7 @@ if __name__ == "__main__":
             tasks.append((idx, slide))
 
     results = [None] * len(tasks)
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = [executor.submit(download_slide, task, sessionid, auth) for task in tasks]
         for i, future in enumerate(futures, start=1):
             idx, slide, content = future.result()
